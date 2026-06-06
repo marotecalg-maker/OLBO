@@ -1,6 +1,6 @@
 workflows:
   testFlight:
-    name: EL BOUNI ABDELHAMID
+    name: elbouni
     integrations:
       app_store_connect: EL BOUNI ABDELHAMID
     environment:
@@ -20,7 +20,6 @@ workflows:
         script: flutter build ipa --release --build-number=$CM_BUILD_NUMBER --export-options-plist=/Users/builder/export_options.plist
     artifacts:
       - build/ios/ipa/*.ipa
-      - build/ios/xcarchive/*.xcarchive
     publishing:
       email:
         recipients:
