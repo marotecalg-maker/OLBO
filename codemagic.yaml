@@ -1,0 +1,33 @@
+workflows:
+  testFlight:
+    name: EL BOUNI ABDELHAMID
+    integrations:
+      app_store_connect: EL BOUNI ABDELHAMID
+    environment:
+      flutter: stable
+      ios_signing:
+        bundle_identifier: com.abdoel.takeort
+        provisioning_profiles:
+          - takourt
+        certificates:
+          - certi
+    scripts:
+      - name: Get Flutter packages
+        script: flutter packages pub get
+      - name: Set up code signing settings on Xcode project
+        script: xcode-project use-profiles
+      - name: Build IPA
+        script: flutter build ipa --release --build-number=$CM_BUILD_NUMBER --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - build/ios/xcarchive/*.xcarchive
+    publishing:
+      email:
+        recipients:
+          - a.elbouni1996@gmail.com
+        notify:
+          success: true
+          failure: true
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
