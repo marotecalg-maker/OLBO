@@ -1,16 +1,16 @@
 workflows:
   testFlight:
-    name: elbouni
+    name: ELBOUNI
     integrations:
-      app_store_connect: EL BOUNI ABDELHAMID
+      app_store_connect: ELBOUNI
     environment:
       flutter: stable
       ios_signing:
         bundle_identifier: com.abdoel.takeort
         provisioning_profiles:
-          - takourt
+          - prov_takort
         certificates:
-          - certi
+          - certificate2
     scripts:
       - name: Get Flutter packages
         script: flutter packages pub get
