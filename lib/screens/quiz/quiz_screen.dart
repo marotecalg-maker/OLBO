@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
@@ -14,33 +15,37 @@ class QuizScreen extends StatefulWidget {
 class _QuizScreenState extends State<QuizScreen> {
   static const int _questionsPerRound = 10;
 
+  QuizLevel? _level;
   late List<QuizQuestion> _questions;
   int _current = 0;
   int _score = 0;
   int? _selected;
   bool _finished = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _startQuiz();
+  void _pickLevel(QuizLevel level) {
+    final pool = kQuizQuestions.where((q) => q.level == level).toList()
+      ..shuffle(Random());
+    setState(() {
+      _level = level;
+      _questions = pool.take(_questionsPerRound).toList();
+      _current = 0;
+      _score = 0;
+      _selected = null;
+      _finished = false;
+    });
   }
 
-  void _startQuiz() {
-    final shuffled = List<QuizQuestion>.from(kQuizQuestions)..shuffle(Random());
-    _questions = shuffled.take(_questionsPerRound).toList();
-    _current = 0;
-    _score = 0;
-    _selected = null;
-    _finished = false;
-  }
-
-  void _select(int index) {
+  void _onAnswer(int index) {
     if (_selected != null) return;
     setState(() {
       _selected = index;
       if (index == _questions[_current].correctAnswer) _score++;
     });
+  }
+
+  void _onTimeout() {
+    if (_selected != null) return;
+    setState(() => _selected = -1); // -1 = timed out (no selection)
   }
 
   void _next() {
@@ -54,9 +59,11 @@ class _QuizScreenState extends State<QuizScreen> {
     }
   }
 
-  void _restart() {
-    setState(_startQuiz);
-  }
+  void _restart() => setState(() {
+        _level = null;
+        _finished = false;
+        _selected = null;
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -64,100 +71,363 @@ class _QuizScreenState extends State<QuizScreen> {
       appBar: AppBar(
         title: const Text('Football Quiz'),
         automaticallyImplyLeading: false,
+        actions: [
+          if (_level != null && !_finished)
+            TextButton(
+              onPressed: _restart,
+              child: Text(
+                'Quit',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                ),
+              ),
+            ),
+        ],
       ),
       body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 350),
-        child: _finished
-            ? _ResultView(
-                key: const ValueKey('result'),
-                score: _score,
-                total: _questions.length,
-                onRestart: _restart,
+        duration: const Duration(milliseconds: 300),
+        child: _level == null
+            ? _LevelSelectView(
+                key: const ValueKey('levels'),
+                onPick: _pickLevel,
               )
-            : _QuizView(
-                key: ValueKey(_current),
-                question: _questions[_current],
-                current: _current,
-                total: _questions.length,
-                selected: _selected,
-                onSelect: _select,
-                onNext: _next,
-              ),
+            : _finished
+                ? _ResultView(
+                    key: const ValueKey('result'),
+                    score: _score,
+                    total: _questions.length,
+                    level: _level!,
+                    onRestart: _restart,
+                    onSameLevel: () => _pickLevel(_level!),
+                  )
+                : _QuizView(
+                    key: ValueKey('$_level-$_current'),
+                    question: _questions[_current],
+                    current: _current,
+                    total: _questions.length,
+                    level: _level!,
+                    selected: _selected,
+                    onSelect: _onAnswer,
+                    onNext: _next,
+                    onTimeout: _onTimeout,
+                  ),
       ),
     );
   }
 }
 
-// ── Quiz view ─────────────────────────────────────────────────────────────────
+// ── Level selection ───────────────────────────────────────────────────────────
 
-class _QuizView extends StatelessWidget {
+class _LevelSelectView extends StatelessWidget {
+  final ValueChanged<QuizLevel> onPick;
+  const _LevelSelectView({super.key, required this.onPick});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Icon(Icons.sports_soccer, size: 64, color: AppColors.primary),
+          const SizedBox(height: 16),
+          Text(
+            'Choose Your Level',
+            textAlign: TextAlign.center,
+            style: Theme.of(context)
+                .textTheme
+                .headlineSmall
+                ?.copyWith(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '10 questions per round. Timer shrinks with difficulty.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context)
+                .textTheme
+                .bodyMedium
+                ?.copyWith(color: Colors.grey),
+          ),
+          const SizedBox(height: 36),
+          _LevelCard(
+            level: QuizLevel.easy,
+            description: 'Basic rules & famous players',
+            onTap: () => onPick(QuizLevel.easy),
+          ),
+          const SizedBox(height: 16),
+          _LevelCard(
+            level: QuizLevel.medium,
+            description: 'History, stats & competitions',
+            onTap: () => onPick(QuizLevel.medium),
+          ),
+          const SizedBox(height: 16),
+          _LevelCard(
+            level: QuizLevel.hard,
+            description: 'Expert knowledge & exact records',
+            onTap: () => onPick(QuizLevel.hard),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LevelCard extends StatelessWidget {
+  final QuizLevel level;
+  final String description;
+  final VoidCallback onTap;
+
+  const _LevelCard({
+    required this.level,
+    required this.description,
+    required this.onTap,
+  });
+
+  Color get _color {
+    switch (level) {
+      case QuizLevel.easy:   return Colors.green;
+      case QuizLevel.medium: return Colors.orange;
+      case QuizLevel.hard:   return Colors.red;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: _color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: _color.withValues(alpha: 0.4), width: 1.5),
+        ),
+        child: Row(
+          children: [
+            Text(level.emoji, style: const TextStyle(fontSize: 32)),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    level.label,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: _color,
+                        ),
+                  ),
+                  Text(
+                    description,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: _color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '${level.seconds}s',
+                style: TextStyle(
+                  color: _color,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Quiz view with timer ──────────────────────────────────────────────────────
+
+class _QuizView extends StatefulWidget {
   final QuizQuestion question;
   final int current;
   final int total;
+  final QuizLevel level;
   final int? selected;
   final ValueChanged<int> onSelect;
   final VoidCallback onNext;
+  final VoidCallback onTimeout;
 
   const _QuizView({
     super.key,
     required this.question,
     required this.current,
     required this.total,
+    required this.level,
     required this.selected,
     required this.onSelect,
     required this.onNext,
+    required this.onTimeout,
   });
 
   @override
+  State<_QuizView> createState() => _QuizViewState();
+}
+
+class _QuizViewState extends State<_QuizView> {
+  late int _remaining;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _remaining = widget.level.seconds;
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      if (_remaining <= 1) {
+        _timer?.cancel();
+        setState(() => _remaining = 0);
+        widget.onTimeout();
+      } else {
+        setState(() => _remaining--);
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(_QuizView old) {
+    super.didUpdateWidget(old);
+    // Stop timer once answered
+    if (widget.selected != null && old.selected == null) {
+      _timer?.cancel();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Color get _timerColor {
+    final pct = _remaining / widget.level.seconds;
+    if (pct > 0.5) return Colors.green;
+    if (pct > 0.25) return Colors.orange;
+    return Colors.red;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final answered = selected != null;
+    final answered = widget.selected != null;
+    final timedOut = widget.selected == -1;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Progress
+          // Progress row
           Row(
             children: [
               Text(
-                'Question ${current + 1}/$total',
+                'Question ${widget.current + 1}/${widget.total}',
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
                     ?.copyWith(fontWeight: FontWeight.w600),
               ),
               const Spacer(),
-              Text(
-                '⚽ ${(((current) / total) * 100).round()}%',
-                style: Theme.of(context).textTheme.bodySmall,
+              // Timer badge
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _timerColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                      color: _timerColor.withValues(alpha: 0.5), width: 1.2),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.timer_outlined, size: 13, color: _timerColor),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${_remaining}s',
+                      style: TextStyle(
+                        color: _timerColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
           const SizedBox(height: 8),
+          // Progress bar
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
-              value: (current) / total,
-              minHeight: 6,
+              value: widget.current / widget.total,
+              minHeight: 5,
               backgroundColor:
                   Theme.of(context).colorScheme.surfaceContainerHighest,
               valueColor:
                   const AlwaysStoppedAnimation<Color>(AppColors.primary),
             ),
           ),
-          const SizedBox(height: 28),
+          const SizedBox(height: 20),
+
+          // Timer progress ring
+          Center(
+            child: SizedBox(
+              width: 56,
+              height: 56,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  CircularProgressIndicator(
+                    value: answered
+                        ? 0
+                        : _remaining / widget.level.seconds,
+                    strokeWidth: 5,
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest,
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(_timerColor),
+                  ),
+                  Text(
+                    answered ? '✓' : '$_remaining',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: _timerColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
 
           // Question card
           Card(
             elevation: 0,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16)),
             color: AppColors.primary.withValues(alpha: 0.08),
             child: Padding(
               padding: const EdgeInsets.all(20),
               child: Text(
-                question.question,
+                widget.question.question,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       fontWeight: FontWeight.w600,
                       height: 1.4,
@@ -166,33 +436,55 @@ class _QuizView extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
+
+          // Timed-out banner
+          if (timedOut)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.4)),
+                ),
+                child: const Text(
+                  '⏰ Time\'s up!',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: Colors.red, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
 
           // Options
-          ...List.generate(question.options.length, (i) {
+          ...List.generate(widget.question.options.length, (i) {
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: _OptionButton(
-                label: question.options[i],
+                label: widget.question.options[i],
                 index: i,
-                selected: selected,
-                correctAnswer: question.correctAnswer,
-                onTap: () => onSelect(i),
+                selected: widget.selected,
+                correctAnswer: widget.question.correctAnswer,
+                onTap: () => widget.onSelect(i),
               ),
             );
           }),
 
-          const SizedBox(height: 8),
+          const SizedBox(height: 4),
 
           // Next button
           AnimatedOpacity(
             opacity: answered ? 1.0 : 0.0,
             duration: const Duration(milliseconds: 300),
             child: FilledButton.icon(
-              onPressed: answered ? onNext : null,
+              onPressed: answered ? widget.onNext : null,
               icon: const Icon(Icons.arrow_forward_rounded),
               label: Text(
-                current + 1 >= total ? 'See Results' : 'Next Question',
+                widget.current + 1 >= widget.total
+                    ? 'See Results'
+                    : 'Next Question',
               ),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
@@ -206,6 +498,8 @@ class _QuizView extends StatelessWidget {
     );
   }
 }
+
+// ── Option button ─────────────────────────────────────────────────────────────
 
 class _OptionButton extends StatelessWidget {
   final String label;
@@ -242,7 +536,8 @@ class _OptionButton extends StatelessWidget {
       borderColor = Colors.green;
       bgColor = Colors.green.withValues(alpha: 0.1);
       textColor = Colors.green.shade700;
-      trailing = const Icon(Icons.check_circle, color: Colors.green, size: 20);
+      trailing =
+          const Icon(Icons.check_circle, color: Colors.green, size: 20);
     } else if (isSelected) {
       borderColor = Colors.red;
       bgColor = Colors.red.withValues(alpha: 0.1);
@@ -255,7 +550,7 @@ class _OptionButton extends StatelessWidget {
           .textTheme
           .bodyLarge!
           .color!
-          .withValues(alpha: 0.4);
+          .withValues(alpha: 0.35);
       trailing = null;
     }
 
@@ -297,13 +592,17 @@ class _OptionButton extends StatelessWidget {
 class _ResultView extends StatelessWidget {
   final int score;
   final int total;
+  final QuizLevel level;
   final VoidCallback onRestart;
+  final VoidCallback onSameLevel;
 
   const _ResultView({
     super.key,
     required this.score,
     required this.total,
+    required this.level,
     required this.onRestart,
+    required this.onSameLevel,
   });
 
   @override
@@ -334,7 +633,6 @@ class _ResultView extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Icon
             Container(
               width: 100,
               height: 100,
@@ -348,23 +646,29 @@ class _ResultView extends StatelessWidget {
                 color: accentColor,
               ),
             ),
-            const SizedBox(height: 24),
-
+            const SizedBox(height: 16),
             Text(
               perfect ? 'Perfect!' : 'Quiz Complete!',
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(context)
+                  .textTheme
+                  .headlineMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
             ),
-            const SizedBox(height: 16),
-
-            // Score card
+            const SizedBox(height: 6),
+            Text(
+              '${level.emoji} ${level.label} Level',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: Colors.grey),
+            ),
+            const SizedBox(height: 20),
             Card(
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16)),
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 40, vertical: 24),
                 child: Column(
                   children: [
                     Text(
@@ -373,35 +677,49 @@ class _ResultView extends StatelessWidget {
                           .textTheme
                           .displayMedium
                           ?.copyWith(
-                              fontWeight: FontWeight.bold, color: accentColor),
+                              fontWeight: FontWeight.bold,
+                              color: accentColor),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '$pct% correct',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.grey,
-                          ),
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: Colors.grey),
                     ),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 20),
-
+            const SizedBox(height: 16),
             Text(
               message,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyLarge,
             ),
-            const SizedBox(height: 32),
-
+            const SizedBox(height: 28),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: onRestart,
+                onPressed: onSameLevel,
                 icon: const Icon(Icons.replay_rounded),
-                label: const Text('Play Again'),
+                label: Text('Play Again (${level.label})'),
                 style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onRestart,
+                icon: const Icon(Icons.tune_rounded),
+                label: const Text('Change Level'),
+                style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),

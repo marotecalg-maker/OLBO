@@ -13,6 +13,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // Quiz is index 0 — primary screen
   int _currentIndex = 0;
 
   final List<_NavItem> _items = const [
@@ -44,7 +45,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isQuizTab = _currentIndex == 4;
+    // Quiz=0, match tabs=1..4, More=5
+    final isQuizTab = _currentIndex == 0;
     final isMoreTab = _currentIndex == 5;
     final hideAppBar = isQuizTab || isMoreTab;
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -72,13 +74,13 @@ class _HomeScreenState extends State<HomeScreen> {
       body: IndexedStack(
         index: _currentIndex,
         children: [
+          const QuizScreen(),
           ..._items.map(
             (item) => MatchesListScreen(
               matchType: item.matchType,
               autoRefresh: item.matchType == MatchType.live,
             ),
           ),
-          const QuizScreen(),
           const MoreScreen(),
         ],
       ),
@@ -86,17 +88,17 @@ class _HomeScreenState extends State<HomeScreen> {
         currentIndex: _currentIndex,
         onTap: (i) => setState(() => _currentIndex = i),
         items: [
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.quiz_outlined),
+            activeIcon: Icon(Icons.quiz),
+            label: 'Quiz',
+          ),
           ..._items.map(
             (item) => BottomNavigationBarItem(
               icon: _navIcon(item, false),
               activeIcon: _navIcon(item, true),
               label: item.label,
             ),
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.quiz_outlined),
-            activeIcon: Icon(Icons.quiz),
-            label: 'Quiz',
           ),
           const BottomNavigationBarItem(
             icon: Icon(Icons.more_horiz),

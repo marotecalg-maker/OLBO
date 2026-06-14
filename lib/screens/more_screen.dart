@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'leagues/leagues_screen.dart';
 import 'settings/settings_screen.dart';
+import 'timer/timer_screen.dart';
 
 class MoreScreen extends StatelessWidget {
   const MoreScreen({super.key});
@@ -12,7 +13,17 @@ class MoreScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-_MoreTile(
+          _MoreTile(
+            icon: Icons.timer_outlined,
+            label: 'Toilet Timer',
+            color: const Color(0xFF1976D2),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const TimerScreen()),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _MoreTile(
             icon: Icons.emoji_events,
             label: 'Leagues',
             color: const Color(0xFFFB8C00),
