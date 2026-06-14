@@ -12,14 +12,11 @@ workflows:
         certificates:
           - certificate2
     scripts:
+      - name: Set up code signing settings on Xcode project
+        script: xcode-project use-profiles
       - name: Get Flutter packages
         script: flutter packages pub get
-      - name: Set version numbers
-        script: |
-          sed -i 's/^version: .*/version: 1.1.0+100/' pubspec.yaml
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion 100" ios/Runner/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 1.1.0" ios/Runner/Info.plist
-      - name: Set up code signing settings on Xcode project
+      - name: Set up code signing
         script: xcode-project use-profiles
       - name: Build IPA
         script: flutter build ipa --release --export-options-plist=/Users/builder/export_options.plist
